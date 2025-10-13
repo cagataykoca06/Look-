@@ -9,7 +9,7 @@ struct LookAtApp: App {
     
     var body: some Scene {
         WindowGroup {
-            PostsList()
+            AuthView()
         }
     }
 }

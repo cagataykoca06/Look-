@@ -1,32 +1,125 @@
 import SwiftUI
 
 struct PostRow: View {
-    let post: Post
+    @ObservedObject var viewModel: PostRowViewModel
+    
+    @State private var showConfirmationDialog = false
+
+    @EnvironmentalObject private var factory: ViewModelFactory
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(post.authorName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                AuthorView(author: viewModel.author)
                 Spacer()
-                Text(post.timestamp.formatted(date: .abbreviated, time: .omitted))
+                Text(viewModel.timestamp.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption)
             }
             .foregroundColor(.gray)
-            Text(post.title)
+            if let imageURL = viewModel.imageURL {
+                PostImage(url: imageURL)
+            }
+            Text(viewModel.title)
                 .font(.title3)
                 .fontWeight(.semibold)
-            Text(post.content)
+            Text(viewModel.content)
+            HStack {
+                LikeButtonButton(isFavorite: viewModel.isFavorite, action: {
+                    viewModel.likePost()
+                })
+                NavigationLink {
+                    CommentsList(viewModel: factory.makeCommentsViewModel(for: viewModel.post))
+                } label {
+                    Label("Comments", systemImage: "text.bubble")
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if viewModel.canDeletePost {
+                    Button(role: .destructive, action: {
+                        showConfirmationDialog = true
+                    }) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+            .labelStyle(.iconOnly)
         }
-        .padding(.vertical)
+        .padding()
+        .confirmationDialog("Are you sure you want to delete this post?", isPresented: $showConfirmationDialog, titleVisibility: .visible) {
+            Button("Delete", role: .destructive, action: {
+                viewModel.deletePost()
+            })
+        }
+        .alert("Error", error: $viewModel.error)
     }
 }
 
+
+private extension PostRow {
+    struct AuthorView: View {
+        let author: User
+        
+        @EnvironmentObject private var factory: ViewModelFactory
+        
+        var body: some View {
+            NavigationLink {
+                PostsList(viewModel: factory.makePostsViewModel(filter: .author(author)))
+            } label: {
+                HStack {
+                    ProfileImage(url: author.imageURL)
+                    .frame(width: 40, height: 40)
+                Text(author.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                }
+            }
+        }
+    }
+}
+
+
+private extension PostRow {
+    struct PostImage: View {
+        let url: URL
+        
+        var body: some View {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } placeholder: {
+                Color.clear
+            }
+        }
+    }
+}
+
+
+private extension PostRow {
+    struct LikeButton: View {
+        let isFavorite: Bool
+        let action: () -> Void
+        
+        var body: some View {
+            Button(action: action) {
+                if isFavorite {
+                    Label("Remove from Likes", systemImage: "heart.fill")
+                } else {
+                    Label("Add to Likes", systemImage: "heart")
+                }
+            }
+            .foregroundColor(isFavorite ? .red : .gray)
+            .animation(.default, value: isFavorite)
+        }
+    }
+}
+
+
 struct PostRow_Previews: PreviewProvider {
     static var previews: some View {
-        List {
-            PostRow(post: Post.testPost)
-        }
+        PostRow(viewModel: PostRowViewModel(post: Post.testPost, deleteAction: {}, likeAction: {}))
+            .environmentObject(ViewModelFactory.preview)
+            .previewLayout(.sizeThatFits)
     }
 }
